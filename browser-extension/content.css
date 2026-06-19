@@ -1,0 +1,160 @@
+/* PrincipAI content script styles */
+
+#principai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #3b82f6;
+  background: #1d3e7a;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 8px 0;
+  z-index: 9999;
+}
+
+#principai-btn:hover {
+  background: #2563eb;
+  color: white;
+  border-color: #60a5fa;
+}
+
+#principai-btn.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+#principai-btn .spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: principai-spin 0.8s linear infinite;
+}
+
+@keyframes principai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Sidebar panel */
+#principai-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  background: #18181b;
+  border-left: 1px solid #27272a;
+  z-index: 999999;
+  overflow-y: auto;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e4e4e7;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+#principai-panel.open {
+  transform: translateX(0);
+}
+
+#principai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #27272a;
+  position: sticky;
+  top: 0;
+  background: #18181b;
+}
+
+#principai-panel-header h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+#principai-panel-close {
+  background: none;
+  border: none;
+  color: #71717a;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+#principai-panel-close:hover {
+  color: white;
+}
+
+#principai-panel-content {
+  padding: 16px 20px;
+}
+
+.principai-section {
+  margin-bottom: 20px;
+}
+
+.principai-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #71717a;
+  margin-bottom: 10px;
+}
+
+.principai-question {
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.principai-question p {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: #f4f4f5;
+  line-height: 1.5;
+}
+
+.principai-question .hint {
+  font-size: 12px;
+  color: #71717a;
+  margin: 0;
+}
+
+.principai-benefit {
+  font-size: 13px;
+  color: #a1a1aa;
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.principai-benefit::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #22c55e;
+}
+
+.principai-error {
+  color: #f87171;
+  font-size: 13px;
+  padding: 12px;
+  background: #450a0a;
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+}

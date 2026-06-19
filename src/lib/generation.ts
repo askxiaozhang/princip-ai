@@ -9,6 +9,11 @@ import {
   detectKnownSeries,
   getYouTubeURL,
 } from "./youtube";
+import {
+  parseBilibiliURL,
+  extractBilibiliTranscript,
+  getBilibiliURL,
+} from "./bilibili";
 import { extractTranscript, truncateTranscript } from "./transcript";
 import {
   analyzeVideo,
@@ -18,16 +23,22 @@ import {
 } from "./analysis";
 
 /**
- * Generate a full learning package for a YouTube URL
+ * Generate a full learning package for a YouTube or Bilibili URL
  */
 export async function generateLearningPackage(
   url: string,
   mode: "auto" | "demo" = "auto"
 ): Promise<LearningPackage> {
+  // Check if it's a Bilibili URL
+  const bilibiliInfo = parseBilibiliURL(url);
+  if (bilibiliInfo) {
+    return generateBilibiliPackage(bilibiliInfo, url);
+  }
+
   const parsed = parseYouTubeURL(url);
   if (!parsed) {
     throw new Error(
-      "无法解析 YouTube URL。请确保输入的是有效的 YouTube 视频或播放列表链接。"
+      "无法解析视频 URL。请输入有效的 YouTube 或 Bilibili 视频链接。"
     );
   }
 
@@ -44,6 +55,78 @@ export async function generateLearningPackage(
   } else {
     return generatePlaylistPackage(parsed.id, url, seriesInfo);
   }
+}
+
+/**
+ * Generate a learning package for a Bilibili video
+ */
+async function generateBilibiliPackage(
+  info: ReturnType<typeof parseBilibiliURL>,
+  url: string
+): Promise<LearningPackage> {
+  if (!info) throw new Error("Invalid Bilibili info");
+
+  if (!isAPIKeyAvailable()) {
+    throw new Error(
+      "Bilibili 视频分析需要配置 API Key。请在 .env.local 中设置 API_KEY。"
+    );
+  }
+
+  const { bvid } = info;
+  let videoTitle = bvid;
+
+  // Try to get video title from Bilibili API
+  try {
+    const res = await fetch(
+      `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          Referer: "https://www.bilibili.com/",
+        },
+      }
+    );
+    const data = await res.json();
+    if (data.code === 0) {
+      videoTitle = data.data?.title || bvid;
+    }
+  } catch (e) {
+    console.warn("Could not get Bilibili video title:", e);
+  }
+
+  // Extract subtitle
+  const transcript = await extractBilibiliTranscript(info);
+  const truncated = truncateTranscript(transcript, 15000);
+
+  // Analyze with LLM
+  const analysis = await analyzeVideo(videoTitle, bvid, truncated);
+
+  const episode: EpisodeGuide = {
+    video_id: bvid,
+    title: videoTitle,
+    url: getBilibiliURL(bvid, info.page),
+    questions: analysis.questions,
+    cognitive_benefits: analysis.cognitive_benefits,
+    misconceptions: analysis.misconceptions,
+    sections: analysis.sections,
+  };
+
+  return {
+    id: `pkg_bili_${bvid}_${Date.now()}`,
+    url,
+    title: videoTitle,
+    source_type: "video",
+    generated_at: new Date().toISOString(),
+    series: {
+      series_title: videoTitle,
+      series_description: "Bilibili 视频",
+      narrative_logic: analysis.narrative_logic,
+      chapter_dependencies: analysis.chapter_dependencies,
+      episodes: [episode],
+    },
+    transcript_length: transcript.full_text.length,
+  };
 }
 
 /**
@@ -227,19 +310,32 @@ async function generateKnownSeriesPackage(
   };
 }
 
-// ===== DEMO MODE: Pre-computed learning package for 3Blue1Brown =====
+// ===== DEMO MODE: Pre-computed learning packages =====
+
+const DEMO_DATA: Record<string, { episodes: EpisodeGuide[]; series: SeriesGuide }> = {};
+
+function getDemoData(seriesTitle: string) {
+  // Lazy-initialize based on series
+  if (seriesTitle.includes("线性代数") || seriesTitle.includes("Linear Algebra")) {
+    return { episodes: LA_DEMO_EPISODES, series: LA_DEMO_SERIES };
+  }
+  if (seriesTitle.includes("微积分") || seriesTitle.includes("Calculus")) {
+    return { episodes: CALC_DEMO_EPISODES, series: CALC_DEMO_SERIES };
+  }
+  // Default fallback to linear algebra
+  return { episodes: LA_DEMO_EPISODES, series: LA_DEMO_SERIES };
+}
 
 function generateDemoPackage(
   url: string,
   seriesInfo: NonNullable<ReturnType<typeof detectKnownSeries>>
 ): LearningPackage {
   const { series, episodeIndex } = seriesInfo;
+  const demo = getDemoData(series.title);
 
-  const allEpisodes: EpisodeGuide[] = DEMO_EPISODES;
-
-  if (episodeIndex >= 0) {
+  if (episodeIndex >= 0 && episodeIndex < demo.episodes.length) {
     // Single episode view
-    const ep = allEpisodes[episodeIndex];
+    const ep = demo.episodes[episodeIndex];
     return {
       id: `demo_video_${ep.video_id}`,
       url,
@@ -247,7 +343,7 @@ function generateDemoPackage(
       source_type: "video",
       generated_at: new Date().toISOString(),
       series: {
-        ...DEMO_SERIES,
+        ...demo.series,
         episodes: [ep],
       },
     };
@@ -255,16 +351,19 @@ function generateDemoPackage(
 
   // Full series view
   return {
-    id: `demo_series`,
+    id: `demo_series_${series.playlistId}`,
     url,
     title: series.title,
     source_type: "playlist",
     generated_at: new Date().toISOString(),
-    series: DEMO_SERIES,
+    series: demo.series,
   };
 }
 
-const DEMO_EPISODES: EpisodeGuide[] = [
+// Keep DEMO_DATA reference silent (used by getDemoData via closure)
+void DEMO_DATA;
+
+const LA_DEMO_EPISODES: EpisodeGuide[] = [
   {
     video_id: "k7RM-otwjNW",
     title: "向量究竟是什么？",
@@ -788,7 +887,7 @@ const DEMO_EPISODES: EpisodeGuide[] = [
   },
 ];
 
-const DEMO_SERIES: SeriesGuide = {
+const LA_DEMO_SERIES: SeriesGuide = {
   series_title: "线性代数的本质 (Essence of Linear Algebra)",
   series_description:
     "3Blue1Brown 的经典线性代数可视化系列，共 11 集。用几何直觉重构线性代数的核心概念。",
@@ -842,6 +941,202 @@ const DEMO_SERIES: SeriesGuide = {
 
 **关键依赖**：如果跳过"矩阵与线性变换"这一集，后续几乎全部无法理解。它是整个系列的枢纽。`,
 
-  episodes: DEMO_EPISODES,
+  episodes: LA_DEMO_EPISODES,
+};
+
+// ===== CALCULUS DEMO DATA =====
+
+const CALC_DEMO_EPISODES: EpisodeGuide[] = [
+  {
+    video_id: "WUvTyaaNkzM",
+    title: "微积分的本质 - 第一章",
+    episode_number: 0,
+    url: "https://www.youtube.com/watch?v=WUvTyaaNkzM",
+    questions: [
+      {
+        question:
+          "微积分的核心思想是什么？为什么它能解决古人无法解决的问题（比如求曲线面积、瞬时速度）？",
+        why_it_matters:
+          "如果你只掌握了导数和积分的计算规则，但没有理解'极限'和'无穷小'背后的思想，你只是在用工具，而不是理解工具。",
+        depth_hint:
+          "真正理解的标准：你能解释为什么'把面积分成无数个细条再求和'这个想法是对的，而不只是'它碰巧得出了正确答案'。",
+      },
+      {
+        question:
+          "微积分的两个核心运算（求导和积分）之间有什么关系？为什么它们是'互逆'的？",
+        why_it_matters:
+          "微积分基本定理是整个课程最重要的结论。理解导数和积分的互逆关系，意味着你掌握了'瞬时变化率'和'累积量'之间的深刻联系。",
+        depth_hint:
+          "真正理解的标准：不用任何公式，你能用'速度和位移'的例子直觉地解释为什么对位移函数求导得到速度函数，对速度函数积分得到位移量。",
+      },
+    ],
+    cognitive_benefits: [
+      "理解微积分不是'无限精确的计算技巧'，而是'用极限思想处理连续变化'的工具",
+      "在脑中建立'导数=切线斜率=瞬时变化率'和'积分=面积=累积量'的几何直觉",
+      "为后续导数和积分的计算建立直觉基础，而不是死记规则",
+    ],
+    misconceptions: [
+      "误区：'微积分只是更难的代数'。真相：微积分引入了一个全新的思想——极限。这个思想让我们能处理'无穷小'和'连续变化'，而普通代数无法做到。",
+      "误区：'导数就是差商的公式 (f(x+h)-f(x))/h'。真相：差商是手段，取极限才是本质。导数是'当 h 趋近于 0 时差商的极限值'，不是差商本身。",
+    ],
+    sections: [
+      {
+        title: "微积分的历史动机",
+        summary: "为什么需要微积分？求面积、求切线、求瞬时速度的古老问题",
+        key_concepts: ["极限", "无穷小", "连续变化"],
+      },
+      {
+        title: "面积与积分的直觉",
+        summary: "用矩形近似曲线面积，极限给出精确答案",
+        key_concepts: ["黎曼和", "积分", "面积"],
+      },
+    ],
+  },
+  {
+    video_id: "9vKqVkMQHKk",
+    title: "导数的悖论",
+    episode_number: 1,
+    url: "https://www.youtube.com/watch?v=9vKqVkMQHKk",
+    questions: [
+      {
+        question:
+          "'瞬时速度'在逻辑上是矛盾的——速度需要时间间隔才能定义，而'瞬时'意味着时间为零。微积分是怎么化解这个矛盾的？",
+        why_it_matters:
+          "这个问题抓住了导数概念最根本的困惑。如果你觉得'瞬时速度'天经地义，你可能还没有真正理解极限的作用。",
+        depth_hint:
+          "真正理解的标准：你能解释'极限'不是'让 h 等于 0'，而是'h 趋向 0 时的行为'——这两句话有本质区别，前者在分母中出现 0/0，后者避免了这个问题。",
+      },
+    ],
+    cognitive_benefits: [
+      "理解导数不是'无穷小量之比'而是'比值的极限'",
+      "理解'极限'是化解连续变化悖论的核心工具",
+      "能用几何方式（切线斜率）解释导数的直觉含义",
+    ],
+    misconceptions: [
+      "误区：'dt 就是无穷小时间，ds 就是无穷小距离'。真相：dt 和 ds 是极限符号，不是'真实存在'的无穷小量。莱布尼茨的记号很直觉，但容易误导人以为它们是真实的无穷小数。",
+    ],
+    sections: [
+      {
+        title: "瞬时速度的悖论",
+        summary: "为什么'瞬时速度'在逻辑上是矛盾的",
+        key_concepts: ["瞬时速度", "悖论", "时间间隔"],
+      },
+      {
+        title: "极限化解悖论",
+        summary: "极限是'趋近'而非'到达'，这解决了 0/0 的问题",
+        key_concepts: ["极限", "趋近", "差商"],
+      },
+    ],
+  },
+  {
+    video_id: "kfF40MiS7zA",
+    title: "积分与黎曼和",
+    episode_number: 7,
+    url: "https://www.youtube.com/watch?v=kfF40MiS7zA",
+    questions: [
+      {
+        question:
+          "为什么'把面积分成无数个宽度趋于零的矩形再求和'这个方法能给出精确答案，而不只是一个近似？",
+        why_it_matters:
+          "这是积分的核心直觉。理解'极限让近似变成精确'，是理解整个积分理论的基础。",
+        depth_hint:
+          "真正理解的标准：你能解释为什么增加矩形数量会让误差减小，以及为什么在'无限多'矩形的极限下误差变为零——不只是说'精度更高了'。",
+      },
+    ],
+    cognitive_benefits: [
+      "理解积分是'无限分割再求和'的极限过程",
+      "掌握黎曼和的几何直觉：矩形近似面积",
+      "理解积分号 ∫ 的含义：它是 S（sum，求和）的拉伸变形",
+    ],
+    misconceptions: [
+      "误区：'积分就是求面积的公式'。真相：积分是一个极限过程。求面积只是它最直观的几何解释，但积分的应用远超求面积（比如求功、求概率、求质量等）。",
+    ],
+    sections: [
+      {
+        title: "黎曼和",
+        summary: "用矩形近似面积，增加矩形数量提高精度",
+        key_concepts: ["黎曼和", "矩形近似", "分割"],
+      },
+      {
+        title: "积分的定义",
+        summary: "黎曼和在矩形宽度趋零时的极限",
+        key_concepts: ["定积分", "极限", "累积量"],
+      },
+    ],
+  },
+  {
+    video_id: "3d6DsjIBzJ4",
+    title: "泰勒级数",
+    episode_number: 10,
+    url: "https://www.youtube.com/watch?v=3d6DsjIBzJ4",
+    questions: [
+      {
+        question:
+          "为什么任何'足够光滑'的函数都可以用多项式来近似？多项式近似的精度来自哪里？",
+        why_it_matters:
+          "泰勒级数揭示了一个惊人的事实：复杂函数（sin、cos、e^x 等）可以用简单的多项式无限精确地表示。这不仅是理论美妙，也是计算机计算这些函数的基础。",
+        depth_hint:
+          "真正理解的标准：你能解释为什么泰勒展开的每一项（1阶、2阶、3阶...）对应函数的每一阶导数，以及为什么'匹配到 n 阶导数'就能在某点附近精确到 n 阶。",
+      },
+    ],
+    cognitive_benefits: [
+      "理解多项式是'最简单'的函数族，泰勒级数是用最简单函数近似任意函数",
+      "掌握 e^x = 1 + x + x²/2! + x³/3! + ... 背后的几何含义",
+      "理解为什么计算机用多项式近似来计算 sin、cos 等超越函数",
+    ],
+    misconceptions: [
+      "误区：'泰勒级数就是无限精确'。真相：泰勒级数在某点附近精确，但在离该点很远的地方可能不收敛。收敛半径是一个关键概念。",
+    ],
+    sections: [
+      {
+        title: "多项式近似的思想",
+        summary: "从0阶到高阶，逐步匹配函数的各阶导数",
+        key_concepts: ["多项式近似", "阶数", "局部精确"],
+      },
+      {
+        title: "泰勒展开式",
+        summary: "泰勒系数的推导：每项系数是对应阶导数除以阶乘",
+        key_concepts: ["泰勒展开", "麦克劳林级数", "收敛半径"],
+      },
+    ],
+  },
+];
+
+const CALC_DEMO_SERIES: SeriesGuide = {
+  series_title: "微积分的本质 (Essence of Calculus)",
+  series_description:
+    "3Blue1Brown 的经典微积分可视化系列，共 11 集。用几何直觉重构微积分的核心概念。",
+  narrative_logic: `3Blue1Brown 的微积分系列有一个贯穿始终的核心叙事：**极限是理解连续变化的钥匙**。
+
+整个系列的编排围绕两条主线展开：
+
+**主线一：导数（差异化的工具）**
+从"瞬时速度悖论"引入极限概念，建立导数的直觉（切线斜率 = 瞬时变化率）。随后通过幂函数、三角函数、指数函数的导数公式，以及链式法则和乘积法则，构建完整的微分工具箱。
+
+**主线二：积分（累积的工具）**
+从"面积近似"引入黎曼和的思想，建立积分的直觉（曲线下面积 = 累积变化量）。微积分基本定理揭示了导数和积分的互逆关系——这是整个课程最重要的连接点。
+
+**收束：泰勒级数**
+系列以泰勒级数结尾，展示了微积分的另一个深层应用：用多项式无限精确地近似复杂函数。这既是对导数概念的综合应用，也预示了更高级的分析数学。`,
+
+  chapter_dependencies: `微积分系列的依赖链相比线性代数更为线性：
+
+**极限** → 所有内容的基础。没有极限的直觉，导数和积分都只是公式。
+
+**导数基础（切线斜率）** → 依赖极限。是所有导数法则的直觉来源。
+
+**导数法则（幂函数、三角、指数）** → 依赖导数基础。
+
+**链式法则与乘积法则** → 依赖单函数导数。处理复合和乘积。
+
+**隐函数求导** → 依赖链式法则。
+
+**积分（黎曼和）** → 相对独立，但需要极限直觉。
+
+**微积分基本定理** → 依赖导数和积分两条主线。是课程的核心定理。
+
+**泰勒级数** → 依赖高阶导数和极限。是微积分的综合应用。`,
+
+  episodes: CALC_DEMO_EPISODES,
 };
 

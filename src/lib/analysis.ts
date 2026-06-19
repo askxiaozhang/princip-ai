@@ -16,13 +16,17 @@ let openaiClient: OpenAI | null = null;
 
 function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.API_KEY || process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error(
-        "OPENAI_API_KEY 未配置。请在 .env.local 中设置你的 OpenAI API 密钥。"
+        "API Key 未配置。请在 .env.local 中设置 API_KEY（支持 DashScope/OpenAI/自定义端点）。"
       );
     }
-    openaiClient = new OpenAI({ apiKey });
+    const baseURL = process.env.API_BASE_URL;
+    openaiClient = new OpenAI({
+      apiKey,
+      ...(baseURL ? { baseURL } : {}),
+    });
   }
   return openaiClient;
 }
@@ -43,7 +47,7 @@ function resolveConfig(
   config?: Partial<AnalysisConfig>
 ): AnalysisConfig {
   return {
-    model: config?.model ?? DEFAULT_CONFIG.model,
+    model: config?.model ?? process.env.API_MODEL ?? DEFAULT_CONFIG.model,
     temperature: config?.temperature ?? DEFAULT_CONFIG.temperature,
     maxTokens: config?.maxTokens ?? DEFAULT_CONFIG.maxTokens,
   };
@@ -274,8 +278,84 @@ export async function summarizeTranscript(
 }
 
 /**
- * Check if OpenAI API key is available
+ * Check if API key is available
  */
 export function isAPIKeyAvailable(): boolean {
-  return !!process.env.OPENAI_API_KEY;
+  return !!(process.env.API_KEY || process.env.OPENAI_API_KEY);
+}
+
+/**
+ * Generate quiz questions for a video/episode
+ */
+export async function generateQuiz(
+  videoTitle: string,
+  transcript: string,
+  questions: Array<{ question: string; why_it_matters: string }>,
+  config?: Partial<AnalysisConfig>
+): Promise<{
+  quiz: Array<{
+    question: string;
+    options: string[];
+    correct: number;
+    explanation: string;
+  }>;
+}> {
+  const client = getOpenAIClient();
+  const cfg = resolveConfig(config);
+
+  const priorQuestions = questions
+    .map((q, i) => `Q${i + 1}: ${q.question}`)
+    .join("\n");
+
+  const prompt = `## 任务
+为以下视频生成一套测验题，检验学习者是否真正理解了核心内容。
+
+## 视频标题
+${videoTitle}
+
+## 核心前置问题（已生成）
+${priorQuestions}
+
+## 视频内容摘要
+${transcript.slice(0, 3000)}
+
+## 输出要求
+生成 5 道单选题，每题有 4 个选项，覆盖核心概念和常见误区。
+
+题目标准：
+- 不是死记硬背题，而是理解验证题
+- 考察能否用概念解决实际问题
+- 错误选项要有代表性（反映常见误解）
+
+JSON 格式：
+{
+  "quiz": [
+    {
+      "question": "题目",
+      "options": ["A选项", "B选项", "C选项", "D选项"],
+      "correct": 0,
+      "explanation": "为什么这个答案正确，以及其他选项为什么错"
+    }
+  ]
+}`;
+
+  const response = await client.chat.completions.create({
+    model: cfg.model,
+    temperature: 0.5,
+    max_tokens: 2048,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("LLM 返回为空");
+
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    throw new Error(`解析测验题失败: ${e}`);
+  }
 }

@@ -87,6 +87,83 @@ function isValidVideoId(id: string): boolean {
 }
 
 /**
+ * 3Blue1Brown Essence of Calculus series
+ */
+export const THREE_BLUE_ONE_BROWN_CALC = {
+  playlistId: "PLZHQObOWTQDMsr9K-rj53DwVRMYO3t5Yr",
+  title: "微积分的本质 (Essence of Calculus)",
+  author: "3Blue1Brown",
+  episodes: [
+    {
+      id: "WUvTyaaNkzM",
+      title: "微积分的本质 - 第一章",
+      en_title: "The Essence of Calculus",
+      number: 0,
+    },
+    {
+      id: "9vKqVkMQHKk",
+      title: "悖论的面积",
+      en_title: "The paradox of the derivative",
+      number: 1,
+    },
+    {
+      id: "S0_qX4VJhMQ",
+      title: "导数公式与几何",
+      en_title: "Derivative formulas through geometry",
+      number: 2,
+    },
+    {
+      id: "YG15m2VwSjA",
+      title: "链式法则与乘积法则",
+      en_title: "Visualizing the chain rule and product rule",
+      number: 3,
+    },
+    {
+      id: "M2QiHPBWg1I",
+      title: "指数函数的导数",
+      en_title: "What's so special about Euler's number e?",
+      number: 4,
+    },
+    {
+      id: "rfG8ce4nNh0",
+      title: "隐函数求导",
+      en_title: "Implicit differentiation, what's going on here?",
+      number: 5,
+    },
+    {
+      id: "FnJqaIESC2s",
+      title: "极限与洛必达法则",
+      en_title: "Limits, L'Hôpital's rule",
+      number: 6,
+    },
+    {
+      id: "kfF40MiS7zA",
+      title: "积分与黎曼和",
+      en_title: "Integration and the fundamental theorem of calculus",
+      number: 7,
+    },
+    {
+      id: "lmxsZFBvOyk",
+      title: "微积分基本定理",
+      en_title: "What does area have to do with slope?",
+      number: 8,
+    },
+    {
+      id: "bvRTAkTMJMU",
+      title: "高阶导数",
+      en_title: "Higher order derivatives",
+      number: 9,
+    },
+    {
+      id: "3d6DsjIBzJ4",
+      title: "泰勒级数",
+      en_title: "Taylor series",
+      number: 10,
+    },
+  ],
+};
+
+/**
  * 3Blue1Brown Linear Algebra series known playlist
  */
 export const THREE_BLUE_ONE_BROWN_LA = {
@@ -166,26 +243,30 @@ export const THREE_BLUE_ONE_BROWN_LA = {
   ],
 };
 
+export type KnownSeries = typeof THREE_BLUE_ONE_BROWN_LA | typeof THREE_BLUE_ONE_BROWN_CALC;
+
 /**
  * Check if a URL belongs to a known series
  */
 export function detectKnownSeries(
   parsed: ParsedYouTubeURL
-): { series: typeof THREE_BLUE_ONE_BROWN_LA; episodeIndex: number } | null {
-  if (parsed.type === "playlist") {
-    if (
-      parsed.id === THREE_BLUE_ONE_BROWN_LA.playlistId ||
-      parsed.id === THREE_BLUE_ONE_BROWN_LA.playlistIdOld
-    ) {
-      return { series: THREE_BLUE_ONE_BROWN_LA, episodeIndex: -1 };
+): { series: KnownSeries; episodeIndex: number } | null {
+  const knownSeries: KnownSeries[] = [THREE_BLUE_ONE_BROWN_LA, THREE_BLUE_ONE_BROWN_CALC];
+
+  for (const series of knownSeries) {
+    if (parsed.type === "playlist") {
+      if (
+        parsed.id === series.playlistId ||
+        ("playlistIdOld" in series && parsed.id === series.playlistIdOld)
+      ) {
+        return { series, episodeIndex: -1 };
+      }
     }
-  }
-  if (parsed.type === "video") {
-    const idx = THREE_BLUE_ONE_BROWN_LA.episodes.findIndex(
-      (e) => e.id === parsed.id
-    );
-    if (idx !== -1) {
-      return { series: THREE_BLUE_ONE_BROWN_LA, episodeIndex: idx };
+    if (parsed.type === "video") {
+      const idx = series.episodes.findIndex((e) => e.id === parsed.id);
+      if (idx !== -1) {
+        return { series, episodeIndex: idx };
+      }
     }
   }
   return null;
