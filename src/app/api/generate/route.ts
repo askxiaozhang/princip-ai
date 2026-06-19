@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
-        { success: false, error: "请提供有效的 YouTube URL" } satisfies GenerateResponse,
+        { success: false, error: "请提供有效的视频 URL（YouTube 或 Bilibili）" } satisfies GenerateResponse,
         { status: 400 }
       );
     }

@@ -16,19 +16,18 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
     setError("");
 
     if (!url.trim()) {
-      setError("请输入 YouTube 视频链接");
+      setError("请输入视频链接（YouTube 或 Bilibili）");
       return;
     }
 
-    // Basic URL validation
     try {
       const parsed = new URL(url.trim());
-      const hostname = parsed.hostname.replace("www.", "");
-      if (
-        !hostname.includes("youtube.com") &&
-        !hostname.includes("youtu.be")
-      ) {
-        setError("请输入有效的 YouTube 链接");
+      const hostname = parsed.hostname.replace("www.", "").replace("m.", "");
+      const isYouTube =
+        hostname.includes("youtube.com") || hostname.includes("youtu.be");
+      const isBilibili = hostname.includes("bilibili.com");
+      if (!isYouTube && !isBilibili) {
+        setError("请输入有效的 YouTube 或 Bilibili 链接");
         return;
       }
     } catch {
@@ -50,7 +49,7 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
               setUrl(e.target.value);
               setError("");
             }}
-            placeholder="粘贴 YouTube 视频链接，例如：https://www.youtube.com/watch?v=..."
+            placeholder="粘贴 YouTube 或 Bilibili 视频链接，例如：https://www.youtube.com/watch?v=..."
             className="flex-1 px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             disabled={isLoading}
           />
@@ -92,7 +91,7 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
         )}
       </div>
 
-      <div className="mt-4 flex items-center gap-3 text-sm text-zinc-500">
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
         <span>试试：</span>
         <button
           type="button"
@@ -103,7 +102,7 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
           }
           className="text-blue-400 hover:text-blue-300 transition-colors"
         >
-          3Blue1Brown 向量篇
+          3B1B 向量篇
         </button>
         <span>|</span>
         <button
@@ -116,6 +115,18 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
           className="text-blue-400 hover:text-blue-300 transition-colors"
         >
           线性代数全系列
+        </button>
+        <span>|</span>
+        <button
+          type="button"
+          onClick={() =>
+            setUrl(
+              "https://www.youtube.com/playlist?list=PLZHQObOWTQDMsr9K-rj53DwVRMYO3t5Yr"
+            )
+          }
+          className="text-blue-400 hover:text-blue-300 transition-colors"
+        >
+          3B1B 微积分系列
         </button>
       </div>
     </form>

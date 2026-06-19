@@ -22,7 +22,7 @@
 
 ## 核心功能
 
-用户输入视频/书籍链接，AI 生成 **学习导向包**：
+用户输入视频链接，AI 生成 **学习导向包**：
 
 | 模块 | 说明 |
 |---|---|
@@ -30,6 +30,8 @@
 | ❓ **第一性原理前置问题** | 每集/每章 2-3 个学完必须能回答的本质问题 |
 | 🎯 **认知收益预告** | 学完这一集，你能做什么之前做不到的事？ |
 | ⚠️ **常见误区预警** | 大部分人学到这里会怎么误解？提前规避 |
+| 🗺️ **交互式思维导图** | 知识结构可视化，章节间的逻辑关系一目了然 |
+| ✏️ **出题测验** | AI 生成测验题，验证真正理解而非"看过了" |
 
 ### 示例：3Blue1Brown 线性代数
 
@@ -57,16 +59,26 @@ cd princip-ai
 npm install
 ```
 
-### 配置 API Key（可选）
+### 配置 API Key（可选，启用动态生成）
 
 创建 `.env.local` 文件：
 
 ```bash
-# OpenAI API Key (用于动态生成学习导向包)
+# 方式一：DashScope（推荐，国内可用）
+# 前往 https://coding.dashscope.aliyuncs.com/apps/anthropic 获取 API Key
+API_KEY=sk-your-dashscope-key
+API_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+API_MODEL=qwen-plus   # 或 claude-3-5-sonnet-20241022 等支持的模型
+
+# 方式二：OpenAI（国际版）
+API_KEY=sk-your-openai-key
+API_MODEL=gpt-4o
+
+# 方式三：保持向后兼容（旧版配置仍有效）
 OPENAI_API_KEY=sk-your-key-here
 ```
 
-> 💡 **没有 API Key？** 应用内置了 3Blue1Brown 线性代数系列的 Demo 数据，可以直接体验！
+> 💡 **没有 API Key？** 应用内置了 3Blue1Brown **线性代数**和**微积分**系列的 Demo 数据，可以直接体验！
 
 ### 运行
 
@@ -77,9 +89,10 @@ npm run dev
 ### 使用
 
 1. 打开 `http://localhost:3000`
-2. 输入视频链接（如 3Blue1Brown 线代系列）
+2. 输入视频链接（YouTube 或 Bilibili）
 3. 获取学习导向包
-4. 带着问题去看视频
+4. 查看思维导图，了解知识结构
+5. 带着问题去看视频，结束后出题检验
 
 ## 技术架构
 
@@ -88,12 +101,12 @@ npm run dev
         │
         ▼
   ┌─────────────┐
-  │  字幕提取    │  youtube-transcript-api / youtubei.js
+  │  字幕提取    │  YouTube: youtubei.js / Bilibili: subtitle API
   └──────┬──────┘
          │
          ▼
   ┌─────────────┐
-  │  结构分析    │  OpenAI GPT-4o / Claude API
+  │  结构分析    │  OpenAI GPT-4o / DashScope / Claude API
   └──────┬──────┘
          │
          ▼
@@ -102,14 +115,24 @@ npm run dev
   └──────┬──────┘
          │
          ▼
-  ┌─────────────┐
-  │  个性化适配  │  根据用户学习目标定制（规划中）
-  └─────────────┘
+  ┌─────────────────────────────┐
+  │  可视化展示                  │
+  │  · 学习导向包（文字卡片）     │
+  │  · 交互式思维导图            │
+  │  · 出题测验                 │
+  └─────────────────────────────┘
 ```
 
-## 未来愿景：浏览器插件
+## 浏览器插件（Phase 2 开发中）
 
-我们计划推出一款浏览器插件，将 PrincipAI 的学习体验从"观看前准备"延伸到"观看中伴随"和"观看后巩固"，打造真正的**沉浸式主动学习闭环**。
+浏览器插件已完成基础框架开发，支持 Chrome/Edge（Manifest V3）。
+
+### 安装方式（开发者模式）
+
+1. 打开 Chrome，进入 `chrome://extensions`
+2. 开启右上角「开发者模式」
+3. 点击「加载已解压的扩展程序」
+4. 选择项目中的 `browser-extension/` 目录
 
 ### 核心能力
 
@@ -118,32 +141,21 @@ npm run dev
 │  🌐 浏览器插件                                               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  ① 一键识别视频章节                                          │
-│     自动提取当前浏览器中视频的时间戳、标题、字幕                │
-│     支持 YouTube / Bilibili / Coursera / 任意视频平台         │
+│  ① 自动检测视频页面                                          │
+│     在 YouTube / Bilibili 视频页面旁加入「PrincipAI 分析」按钮 │
 │                                                             │
-│  ② AI 一键 Prelearning                                      │
-│     基于提取的视频结构，AI 即时生成学习导向包                  │
-│     无需跳转页面，在当前标签页即可开启主动学习                 │
+│  ② 一键生成学习导向包                                        │
+│     点击按钮 → 调用本地 PrincipAI 服务 → 在侧边栏展示结果    │
 │                                                             │
-│  ③ 思维导图生成                                              │
-│     生成类似 XMind 的交互式知识导图                           │
-│     章节之间的逻辑关系、前置概念、核心推导一目了然             │
+│  ③ 思维导图生成（规划中）                                    │
+│     生成类似 XMind 的交互式知识导图                          │
+│     章节之间的逻辑关系、前置概念、核心推导一目了然            │
 │                                                             │
-│  ④ 智能暂停 + 思考锚点                                       │
-│     在关键概念处自动暂停视频，抛出引导性问题                   │
-│     "这个结论的前提是什么？如果改变 X，结论还成立吗？"         │
-│     强制用户在关键节点停下来思考，而不是被动滑过               │
+│  ④ 智能暂停 + 思考锚点（规划中）                             │
+│     在关键概念处自动暂停视频，抛出引导性问题                  │
 │                                                             │
-│  ⑤ 观后测试                                                  │
-│     看完视频后生成针对性的测试题                              │
-│     覆盖本集核心概念、易错点、延伸思考                        │
-│     检验是否真正形成深层理解，而不仅仅是"看过了"               │
-│                                                             │
-│  ⑥ 个性化适配                                                │
-│     根据用户的学习水平动态调整问题难度和节奏                  │
-│     初学者：更多基础概念锚定；进阶者：更多延伸推导挑战         │
-│     持续积累用户画像，越用越懂你                              │
+│  ⑤ 观后测试（规划中）                                        │
+│     看完视频后生成针对性的测试题                             │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -155,7 +167,7 @@ npm run dev
   │                     │                       │
   ▼                     ▼                       ▼
 ┌─────────┐        ┌──────────┐           ┌──────────┐
-│Prelearning│       │ 智能暂停  │           │ 观后测试  │
+│Prelearning│       │ 智能暂停  │           │ 观后测验  │
 │ 导向包    │ ───▶ │ 思考锚点  │  ───▶     │ 巩固检验  │
 │ 思维导图  │       │ 沉浸式    │           │ 个性化    │
 └─────────┘        └──────────┘           └──────────┘
@@ -172,8 +184,10 @@ npm run dev
 |---|---|
 | 前端 | Next.js 16 + TailwindCSS v4 |
 | 后端 | Next.js API Routes (Node.js) |
-| 字幕提取 | youtubei.js |
-| LLM | OpenAI GPT-4o (支持 Claude 扩展) |
+| YouTube 字幕 | youtubei.js + 直接 HTTP API |
+| Bilibili 字幕 | Bilibili Subtitle API |
+| LLM | OpenAI GPT-4o / DashScope / 任意 OpenAI 兼容 API |
+| 浏览器插件 | Chrome Manifest V3 |
 | 部署 | Vercel |
 
 ## 项目结构
@@ -181,29 +195,42 @@ npm run dev
 ```
 princip-ai/
 ├── README.md
-├── feasibility-report.md    # 可行性调研报告
-├── core.md                  # 产品核心思路
+├── english.md
+├── feasibility-report.md      # 可行性调研报告
+├── core.md                    # 产品核心思路
+├── browser-extension/         # 浏览器插件（Chrome MV3）
+│   ├── manifest.json
+│   ├── content.js             # 视频页面注入脚本
+│   ├── content.css
+│   ├── background.js          # Service Worker
+│   ├── popup.html             # 插件弹窗 UI
+│   ├── popup.js
+│   └── icons/
 ├── src/
-│   ├── app/                 # Next.js App Router
+│   ├── app/                   # Next.js App Router
 │   │   ├── api/
-│   │   │   ├── generate/    # 学习导向包生成 API
-│   │   │   └── transcript/  # 字幕提取 API
-│   │   ├── layout.tsx       # 根布局
-│   │   ├── page.tsx         # 主页
-│   │   └── globals.css      # 全局样式
-│   ├── components/          # React 组件
-│   │   ├── URLInput.tsx     # URL 输入框
-│   │   ├── LearningPackageView.tsx  # 学习导向包展示
-│   │   ├── EpisodeCard.tsx  # 单集卡片
-│   │   ├── NarrativeLogic.tsx       # 编排逻辑展示
-│   │   └── ChapterDependencies.tsx  # 章节依赖展示
-│   └── lib/                 # 核心逻辑
-│       ├── types.ts         # 类型定义
-│       ├── youtube.ts       # YouTube URL 解析
-│       ├── transcript.ts    # 字幕提取
-│       ├── prompts.ts       # LLM 提示词
-│       ├── analysis.ts      # LLM 分析
-│       └── generation.ts    # 导向包生成（含 Demo 数据）
+│   │   │   ├── generate/      # 学习导向包生成 API
+│   │   │   ├── transcript/    # 字幕提取 API
+│   │   │   └── quiz/          # 出题测验 API
+│   │   ├── layout.tsx
+│   │   ├── page.tsx           # 主页（含导向包 + 思维导图 + 测验 Tab）
+│   │   └── globals.css
+│   ├── components/
+│   │   ├── URLInput.tsx       # URL 输入框（支持 YouTube/Bilibili）
+│   │   ├── LearningPackageView.tsx
+│   │   ├── EpisodeCard.tsx
+│   │   ├── NarrativeLogic.tsx
+│   │   ├── ChapterDependencies.tsx
+│   │   ├── MindMap.tsx        # 交互式思维导图
+│   │   └── QuizView.tsx       # 出题测验弹窗
+│   └── lib/
+│       ├── types.ts
+│       ├── youtube.ts         # YouTube URL 解析（含微积分系列）
+│       ├── bilibili.ts        # Bilibili URL 解析 + 字幕提取
+│       ├── transcript.ts      # YouTube 字幕提取
+│       ├── prompts.ts
+│       ├── analysis.ts        # LLM 分析（支持 DashScope/OpenAI）
+│       └── generation.ts      # 导向包生成（线代 + 微积分 Demo）
 └── package.json
 ```
 
@@ -217,21 +244,22 @@ princip-ai/
   - [x] 3Blue1Brown 线性代数 Demo 数据（11 集全量学习导向包）
   - [x] 完整的 UI 组件（URL 输入、导向包展示、可展开单集卡片）
   - [x] 响应式暗色主题
-- [ ] **Phase 2** — 扩展内容（微积分、CS 经典课程）
-  - [ ] 动态生成学习导向包（需要 API Key）
-  - [ ] 支持 Bilibili 字幕提取
-  - [ ] 添加更多预设课程
+- [x] **Phase 2** — 扩展内容与浏览器插件 🚀
+  - [x] **灵活 API 配置**：支持 DashScope、OpenAI 或任意 OpenAI 兼容 API（`API_KEY` + `API_BASE_URL` + `API_MODEL`）
+  - [x] **Bilibili 字幕提取**：通过 Bilibili Subtitle API 提取 CC 字幕
+  - [x] **更多预设课程**：新增 3Blue1Brown 微积分系列 Demo（11 集）
+  - [x] **交互式思维导图**：可视化知识结构，点击折叠/展开节点
+  - [x] **出题测验**：AI 生成单选题，即时反馈 + 解析
+  - [x] **浏览器插件框架**：Chrome MV3，YouTube/Bilibili 视频页面注入按钮，侧边栏展示结果
 - [ ] **Phase 3** — 平台化（支持任意视频 + 个性化）
   - [ ] 用户账户和进度追踪
   - [ ] 个性化学习目标定制
   - [ ] 学习反刍机制（艾宾浩斯遗忘曲线）
-- [ ] **Phase 4** — 浏览器插件：沉浸式主动学习闭环
-  - [ ] 一键识别当前浏览器视频章节（YouTube / Bilibili / Coursera 等）
-  - [ ] AI 一键 Prelearning，即时生成学习导向包
-  - [ ] 交互式思维导图生成（类似 XMind）
-  - [ ] 智能暂停 + 思考锚点：在关键概念处自动暂停并抛出引导性问题
-  - [ ] 观后测试：视频观看后的针对性测试题
-  - [ ] 个性化适配：根据用户水平动态调整问题难度和节奏
+- [ ] **Phase 4** — 浏览器插件完善
+  - [ ] 思维导图同步到插件侧边栏
+  - [ ] 智能暂停 + 思考锚点（在关键概念处自动暂停视频）
+  - [ ] 观后测验集成到插件
+  - [ ] 个性化适配：根据用户水平动态调整
 - [ ] **Phase 5** — 社区与生态
   - [ ] 费曼对话模拟器
   - [ ] 知识推导关系网络
@@ -239,11 +267,11 @@ princip-ai/
 
 ## 参与贡献
 
-本项目目前处于 MVP 阶段，欢迎以下形式的贡献：
+本项目欢迎以下形式的贡献：
 
 - 💡 对产品方向的反馈和建议
-- 🧪 MVP 测试用户（尤其是对 3Blue1Brown 内容感兴趣的理工科学习者）
-- 🛠️ 技术开发（前端/后端/Prompt 工程）
+- 🧪 测试用户（尤其对 3Blue1Brown 内容感兴趣的理工科学习者）
+- 🛠️ 技术开发（前端/后端/Prompt 工程/浏览器插件）
 - 📝 内容审核（确保生成的第一性原理问题质量）
 
 ## 许可

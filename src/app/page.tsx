@@ -3,17 +3,28 @@
 import { useState } from "react";
 import { URLInput } from "@/components/URLInput";
 import { LearningPackageView } from "@/components/LearningPackageView";
+import { MindMap } from "@/components/MindMap";
+import { QuizView, type QuizQuestion } from "@/components/QuizView";
 import type { LearningPackage } from "@/lib/types";
+
+type Tab = "guide" | "mindmap" | "quiz";
 
 export default function Home() {
   const [pkg, setPkg] = useState<LearningPackage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("guide");
+  const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [showQuiz, setShowQuiz] = useState(false);
 
   const handleSubmit = async (url: string) => {
     setIsLoading(true);
     setError(null);
     setPkg(null);
+    setQuiz(null);
+    setActiveTab("guide");
 
     try {
       const response = await fetch("/api/generate", {
@@ -33,6 +44,32 @@ export default function Home() {
       setError(e instanceof Error ? e.message : "未知错误");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGenerateQuiz = async () => {
+    if (!pkg) return;
+    setQuizLoading(true);
+    setQuizError(null);
+    const firstEp = pkg.series.episodes[0];
+    try {
+      const res = await fetch("/api/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoTitle: firstEp.title,
+          transcript: "",
+          questions: firstEp.questions,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "生成失败");
+      setQuiz(data.quiz);
+      setShowQuiz(true);
+    } catch (e) {
+      setQuizError(e instanceof Error ? e.message : "未知错误");
+    } finally {
+      setQuizLoading(false);
     }
   };
 
@@ -100,7 +137,60 @@ export default function Home() {
       {/* Results */}
       {pkg && (
         <section className="max-w-6xl mx-auto px-4 py-8 pb-24">
-          <LearningPackageView pkg={pkg} />
+          {/* Tabs */}
+          <div className="flex items-center gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            {(
+              [
+                { id: "guide", label: "📋 学习导向包" },
+                { id: "mindmap", label: "🗺️ 思维导图" },
+              ] as { id: Tab; label: string }[]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === tab.id
+                    ? "bg-blue-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+            <button
+              onClick={handleGenerateQuiz}
+              disabled={quizLoading}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-all disabled:opacity-50 flex items-center gap-1.5"
+              title="需要配置 API Key"
+            >
+              {quizLoading ? (
+                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                "✏️"
+              )}
+              出题测验
+            </button>
+          </div>
+
+          {quizError && (
+            <p className="mb-4 text-sm text-red-400 bg-red-950/30 border border-red-900/30 rounded-lg px-4 py-2">
+              {quizError}
+            </p>
+          )}
+
+          {activeTab === "guide" && <LearningPackageView pkg={pkg} />}
+          {activeTab === "mindmap" && <MindMap pkg={pkg} />}
+
+          {showQuiz && quiz && (
+            <QuizView
+              quiz={quiz}
+              title={pkg.series.episodes[0]?.title || pkg.title}
+              onClose={() => setShowQuiz(false)}
+            />
+          )}
         </section>
       )}
 
