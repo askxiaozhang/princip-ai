@@ -90,7 +90,7 @@ function isValidVideoId(id: string): boolean {
  * 3Blue1Brown Linear Algebra series known playlist
  */
 export const THREE_BLUE_ONE_BROWN_LA = {
-  playlistId: "PLZHQOb0TqpDPjL1e4x1My9i2C0SSIqHvE",
+  playlistId: "PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab",
   playlistIdOld: "PLZHQOb0TqpDNOtK0DggeHPJJmYlhYPYmP",
   title: "线性代数的本质 (Essence of Linear Algebra)",
   author: "3Blue1Brown",

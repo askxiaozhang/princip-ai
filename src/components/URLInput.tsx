@@ -98,7 +98,7 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
           type="button"
           onClick={() =>
             setUrl(
-              "https://www.youtube.com/watch?v=k7RM-otwjNW"
+              "https://www.youtube.com/watch?v=fNk_zzaMoSs&list=PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab"
             )
           }
           className="text-blue-400 hover:text-blue-300 transition-colors"
@@ -110,7 +110,7 @@ export function URLInput({ onSubmit, isLoading }: URLInputProps) {
           type="button"
           onClick={() =>
             setUrl(
-              "https://www.youtube.com/playlist?list=PLZHQOb0TqpDPjL1e4x1My9i2C0SSIqHvE"
+              "https://www.youtube.com/playlist?list=PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab"
             )
           }
           className="text-blue-400 hover:text-blue-300 transition-colors"
