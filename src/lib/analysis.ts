@@ -1,8 +1,9 @@
 /**
- * LLM analysis module - uses OpenAI API for content analysis
+ * LLM analysis module - uses Anthropic API for content analysis
+ * Compatible with DashScope's Anthropic-compatible proxy endpoint.
  */
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import {
   SYSTEM_PROMPT,
   buildSingleVideoPrompt,
@@ -12,23 +13,39 @@ import {
 } from "./prompts";
 import type { FirstPrincipleQuestion, VideoSection } from "./types";
 
-let openaiClient: OpenAI | null = null;
+let anthropicClient: Anthropic | null = null;
 
-function getOpenAIClient(): OpenAI {
-  if (!openaiClient) {
+function getAnthropicClient(): Anthropic {
+  if (!anthropicClient) {
     const apiKey = process.env.API_KEY || process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error(
-        "API Key 未配置。请在 .env.local 中设置 API_KEY（支持 DashScope/OpenAI/自定义端点）。"
+        "API Key 未配置。请在 .env.local 中设置 API_KEY（支持 DashScope/Anthropic/自定义端点）。"
       );
     }
     const baseURL = process.env.API_BASE_URL;
-    openaiClient = new OpenAI({
+    anthropicClient = new Anthropic({
       apiKey,
       ...(baseURL ? { baseURL } : {}),
     });
   }
-  return openaiClient;
+  return anthropicClient;
+}
+
+/**
+ * Extract JSON from LLM response text.
+ * Handles responses wrapped in markdown code blocks (```json ... ``` or ``` ... ```).
+ */
+function extractJson(text: string): string {
+  const trimmed = text.trim();
+  // Match ```json\n{...}\n``` or ```\n{...}\n```
+  const fenceMatch = trimmed.match(
+    /^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/
+  );
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+  return trimmed;
 }
 
 export interface AnalysisConfig {
@@ -38,7 +55,7 @@ export interface AnalysisConfig {
 }
 
 const DEFAULT_CONFIG: AnalysisConfig = {
-  model: "gpt-4o",
+  model: "qwen3.7-plus",
   temperature: 0.7,
   maxTokens: 4096,
 };
@@ -70,33 +87,31 @@ export async function analyzeVideo(
   misconceptions: string[];
   sections: VideoSection[];
 }> {
-  const client = getOpenAIClient();
+  const client = getAnthropicClient();
   const cfg = resolveConfig(config);
-  const prompt = buildSingleVideoPrompt(
+  const userPrompt = buildSingleVideoPrompt(
     videoTitle,
     videoId,
     transcript,
     seriesContext
   );
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: cfg.model,
     temperature: cfg.temperature,
     max_tokens: cfg.maxTokens,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    response_format: { type: "json_object" },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content =
+    response.content.find((b) => b.type === "text")?.text || "";
   if (!content) {
     throw new Error("LLM 返回为空");
   }
 
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(extractJson(content));
     return {
       narrative_logic: parsed.narrative_logic || "",
       chapter_dependencies: parsed.chapter_dependencies || "",
@@ -145,28 +160,26 @@ export async function analyzeSeries(
   narrative_logic: string;
   chapter_dependencies: string;
 }> {
-  const client = getOpenAIClient();
+  const client = getAnthropicClient();
   const cfg = resolveConfig(config);
-  const prompt = buildSeriesAnalysisPrompt(seriesTitle, videoSummaries);
+  const userPrompt = buildSeriesAnalysisPrompt(seriesTitle, videoSummaries);
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: cfg.model,
     temperature: cfg.temperature,
     max_tokens: cfg.maxTokens,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    response_format: { type: "json_object" },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content =
+    response.content.find((b) => b.type === "text")?.text || "";
   if (!content) {
     throw new Error("LLM 返回为空");
   }
 
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(extractJson(content));
     return {
       narrative_logic: parsed.narrative_logic || "",
       chapter_dependencies: parsed.chapter_dependencies || "",
@@ -186,33 +199,31 @@ export async function analyzeEpisodeInSeries(
   seriesLogic: string,
   config?: Partial<AnalysisConfig>
 ) {
-  const client = getOpenAIClient();
+  const client = getAnthropicClient();
   const cfg = resolveConfig(config);
-  const prompt = buildEpisodeFromSeriesPrompt(
+  const userPrompt = buildEpisodeFromSeriesPrompt(
     episodeTitle,
     episodeNumber,
     transcript,
     seriesLogic
   );
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: cfg.model,
     temperature: cfg.temperature,
     max_tokens: cfg.maxTokens,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    response_format: { type: "json_object" },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content =
+    response.content.find((b) => b.type === "text")?.text || "";
   if (!content) {
     throw new Error("LLM 返回为空");
   }
 
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(extractJson(content));
     return {
       narrative_logic: parsed.narrative_logic || "",
       chapter_dependencies: parsed.chapter_dependencies || "",
@@ -254,27 +265,22 @@ export async function summarizeTranscript(
   transcript: string,
   config?: Partial<AnalysisConfig>
 ): Promise<string> {
-  const client = getOpenAIClient();
+  const client = getAnthropicClient();
   const cfg = resolveConfig({
     ...config,
     maxTokens: config?.maxTokens ?? 2048,
   });
-  const prompt = buildSummaryPrompt(videoTitle, transcript);
+  const userPrompt = buildSummaryPrompt(videoTitle, transcript);
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: cfg.model,
     temperature: 0.3,
     max_tokens: cfg.maxTokens,
-    messages: [
-      {
-        role: "system",
-        content: "你是一个教育内容分析专家。请用中文输出。",
-      },
-      { role: "user", content: prompt },
-    ],
+    system: "你是一个教育内容分析专家。请用中文输出。",
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  return response.choices[0]?.message?.content || "";
+  return response.content.find((b) => b.type === "text")?.text || "";
 }
 
 /**
@@ -300,14 +306,14 @@ export async function generateQuiz(
     explanation: string;
   }>;
 }> {
-  const client = getOpenAIClient();
+  const client = getAnthropicClient();
   const cfg = resolveConfig(config);
 
   const priorQuestions = questions
     .map((q, i) => `Q${i + 1}: ${q.question}`)
     .join("\n");
 
-  const prompt = `## 任务
+  const userPrompt = `## 任务
 为以下视频生成一套测验题，检验学习者是否真正理解了核心内容。
 
 ## 视频标题
@@ -339,22 +345,19 @@ JSON 格式：
   ]
 }`;
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: cfg.model,
     temperature: 0.5,
     max_tokens: 2048,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    response_format: { type: "json_object" },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content = response.content.find((b) => b.type === "text")?.text || "";
   if (!content) throw new Error("LLM 返回为空");
 
   try {
-    return JSON.parse(content);
+    return JSON.parse(extractJson(content));
   } catch (e) {
     throw new Error(`解析测验题失败: ${e}`);
   }
