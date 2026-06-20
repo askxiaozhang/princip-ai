@@ -11,10 +11,16 @@ export interface FirstPrincipleQuestion {
 
 export interface VideoSection {
   title: string;
-  start_time?: number; // seconds
+  start_time?: number; // seconds — anchored to a real subtitle segment when possible
   end_time?: number;
   summary: string;
   key_concepts: string[];
+  /**
+   * Verbatim opening quote of this section, taken from the subtitles. Used to
+   * align the section to the exact subtitle timestamp instead of trusting the
+   * model's own time arithmetic.
+   */
+  anchor?: string;
 }
 
 export interface EpisodeGuide {

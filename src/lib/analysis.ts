@@ -16,6 +16,7 @@ import type {
   VideoSection,
   AnswerEvaluation,
 } from "./types";
+import type { TranscriptSegment } from "./transcript";
 
 let anthropicClient: Anthropic | null = null;
 
@@ -83,7 +84,63 @@ function mapSections(raw: unknown): VideoSection[] {
     key_concepts: (s.key_concepts as string[]) || [],
     start_time: parseTimeToSeconds(s.start_time),
     end_time: parseTimeToSeconds(s.end_time),
+    anchor:
+      typeof s.anchor === "string"
+        ? s.anchor
+        : typeof s.anchor_quote === "string"
+        ? (s.anchor_quote as string)
+        : undefined,
   }));
+}
+
+/**
+ * Strip whitespace and punctuation so an LLM-quoted anchor can be matched
+ * against the raw subtitle text regardless of spacing/punctuation differences.
+ */
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[\p{P}\p{S}]/gu, "");
+}
+
+/**
+ * Replace each section's start_time with the EXACT start time of the subtitle
+ * segment where its `anchor` quote first appears. This makes key moments
+ * precise (pulled straight from the caption track) instead of relying on the
+ * model's own time arithmetic. Sections whose anchor can't be located keep
+ * their (clamped) model-provided start_time as a fallback.
+ */
+export function alignSectionsToTranscript(
+  sections: VideoSection[],
+  segments: TranscriptSegment[]
+): VideoSection[] {
+  if (!segments.length) return sections;
+
+  // Build one normalized haystack with a char-index -> segment-start map.
+  let haystack = "";
+  const charStart: number[] = [];
+  for (const seg of segments) {
+    const norm = normalizeForMatch(seg.text);
+    for (let i = 0; i < norm.length; i++) charStart.push(seg.start);
+    haystack += norm;
+  }
+
+  return sections.map((s) => {
+    if (!s.anchor) return s;
+    const anchor = normalizeForMatch(s.anchor);
+    if (anchor.length < 4) return s;
+
+    let idx = haystack.indexOf(anchor);
+    // Fall back to a shorter prefix if the full quote was lightly paraphrased.
+    if (idx === -1 && anchor.length > 10) {
+      idx = haystack.indexOf(anchor.slice(0, 10));
+    }
+    if (idx >= 0 && idx < charStart.length) {
+      return { ...s, start_time: Math.round(charStart[idx]) };
+    }
+    return s;
+  });
 }
 
 /**

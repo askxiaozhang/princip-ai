@@ -18,11 +18,13 @@ import {
   extractTranscript,
   truncateTranscript,
   type TranscriptResult,
+  type TranscriptSegment,
 } from "./transcript";
 import {
   analyzeVideo,
   analyzeSeries,
   analyzeEpisodeInSeries,
+  alignSectionsToTranscript,
   isAPIKeyAvailable,
 } from "./analysis";
 
@@ -130,10 +132,12 @@ async function generateBilibiliPackage(
   // Try to extract subtitles; fall back to video description if none available
   let transcriptText = "";
   let transcriptLength = 0;
+  let transcriptSegments: TranscriptSegment[] = [];
   try {
     const transcript = await extractBilibiliTranscript(info);
     transcriptText = truncateTranscript(transcript, 15000);
     transcriptLength = transcript.full_text.length;
+    transcriptSegments = transcript.segments;
     videoDuration = videoDuration ?? transcriptEndSeconds(transcript);
   } catch (e) {
     if (e instanceof Error && e.message.includes("没有可用字幕")) {
@@ -163,7 +167,8 @@ async function generateBilibiliPackage(
     questions: analysis.questions,
     cognitive_benefits: analysis.cognitive_benefits,
     misconceptions: analysis.misconceptions,
-    sections: analysis.sections,
+    // Anchor each key moment to the exact subtitle timestamp (when CC available).
+    sections: alignSectionsToTranscript(analysis.sections, transcriptSegments),
   };
 
   return {
@@ -239,7 +244,8 @@ async function generateSingleVideoPackage(
     questions: analysis.questions,
     cognitive_benefits: analysis.cognitive_benefits,
     misconceptions: analysis.misconceptions,
-    sections: analysis.sections,
+    // Anchor each key moment to the exact subtitle timestamp.
+    sections: alignSectionsToTranscript(analysis.sections, transcript.segments),
   };
 
   if (seriesInfo) {
@@ -353,7 +359,10 @@ async function generateKnownSeriesPackage(
       episodes[i].questions = epAnalysis.questions;
       episodes[i].cognitive_benefits = epAnalysis.cognitive_benefits;
       episodes[i].misconceptions = epAnalysis.misconceptions;
-      episodes[i].sections = epAnalysis.sections;
+      episodes[i].sections = alignSectionsToTranscript(
+        epAnalysis.sections,
+        transcript.segments
+      );
     } catch (e) {
       console.warn(`Failed to analyze episode ${ep.number}:`, e);
       // Keep empty questions/benefits/misconceptions
