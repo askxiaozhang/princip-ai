@@ -102,7 +102,10 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
                     className="rounded-lg bg-zinc-800/50 p-3"
                   >
                     <div className="font-medium text-white text-sm flex items-center gap-2">
-                      {typeof section.start_time === "number" && (
+                      {typeof section.start_time === "number" &&
+                        section.start_time >= 0 &&
+                        (!episode.duration ||
+                          section.start_time <= episode.duration + 2) && (
                         <a
                           href={timestampedUrl(episode.url, section.start_time)}
                           target="_blank"

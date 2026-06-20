@@ -86,6 +86,46 @@ function mapSections(raw: unknown): VideoSection[] {
   }));
 }
 
+/**
+ * Hard guardrail against hallucinated timestamps. The LLM sometimes invents
+ * start/end times that exceed the real video length (e.g. an hour-long mark on
+ * a 12-minute video). Drop any timestamp that is negative or runs past the
+ * known duration, rather than letting the UI offer a broken jump.
+ *
+ * `maxSeconds` is the authoritative video length when known; a small tolerance
+ * absorbs rounding. When the duration is unknown we still drop negatives and
+ * inverted ranges.
+ */
+export function sanitizeSections(
+  sections: VideoSection[],
+  maxSeconds?: number
+): VideoSection[] {
+  const cap =
+    maxSeconds && maxSeconds > 0 ? Math.round(maxSeconds * 1.02) + 2 : undefined;
+
+  const inRange = (t: number | undefined): boolean => {
+    if (typeof t !== "number" || !Number.isFinite(t) || t < 0) return false;
+    if (cap !== undefined && t > cap) return false;
+    return true;
+  };
+
+  return sections.map((s) => {
+    let start = inRange(s.start_time) ? s.start_time : undefined;
+    let end = inRange(s.end_time) ? s.end_time : undefined;
+    // An end before/at the start is meaningless — drop it.
+    if (
+      typeof start === "number" &&
+      typeof end === "number" &&
+      end <= start
+    ) {
+      end = undefined;
+    }
+    // If only an end survived, it can't anchor a jump on its own.
+    if (start === undefined) end = undefined;
+    return { ...s, start_time: start, end_time: end };
+  });
+}
+
 export interface AnalysisConfig {
   model: string;
   temperature: number;
@@ -116,6 +156,7 @@ export async function analyzeVideo(
   videoId: string,
   transcript: string,
   seriesContext?: string,
+  videoDuration?: number,
   config?: Partial<AnalysisConfig>
 ): Promise<{
   narrative_logic: string;
@@ -131,7 +172,8 @@ export async function analyzeVideo(
     videoTitle,
     videoId,
     transcript,
-    seriesContext
+    seriesContext,
+    videoDuration
   );
 
   const response = await client.messages.create({
@@ -166,7 +208,7 @@ export async function analyzeVideo(
       ),
       cognitive_benefits: parsed.cognitive_benefits || [],
       misconceptions: parsed.misconceptions || [],
-      sections: mapSections(parsed.sections),
+      sections: sanitizeSections(mapSections(parsed.sections), videoDuration),
     };
   } catch (e) {
     throw new Error(`解析 LLM 输出失败: ${e}`);
@@ -225,6 +267,7 @@ export async function analyzeEpisodeInSeries(
   episodeNumber: number,
   transcript: string,
   seriesLogic: string,
+  videoDuration?: number,
   config?: Partial<AnalysisConfig>
 ) {
   const client = getAnthropicClient();
@@ -233,7 +276,8 @@ export async function analyzeEpisodeInSeries(
     episodeTitle,
     episodeNumber,
     transcript,
-    seriesLogic
+    seriesLogic,
+    videoDuration
   );
 
   const response = await client.messages.create({
@@ -268,7 +312,7 @@ export async function analyzeEpisodeInSeries(
       ),
       cognitive_benefits: parsed.cognitive_benefits || [],
       misconceptions: parsed.misconceptions || [],
-      sections: mapSections(parsed.sections),
+      sections: sanitizeSections(mapSections(parsed.sections), videoDuration),
     };
   } catch (e) {
     throw new Error(`解析 LLM 输出失败: ${e}`);

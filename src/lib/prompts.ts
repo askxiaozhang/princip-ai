@@ -27,15 +27,34 @@ export const SYSTEM_PROMPT = `你是 PrincipAI 的 AI 引擎 — 一个专注于
 2. 解释为什么会产生这个误解
 3. 给出验证标准：真正理解应该是什么样的`;
 
+function formatDurationHint(durationSeconds?: number): string {
+  if (!durationSeconds || durationSeconds <= 0) return "";
+  const m = Math.floor(durationSeconds / 60);
+  const s = Math.round(durationSeconds % 60);
+  return `- 视频总时长: ${m}分${s}秒（共 ${Math.round(durationSeconds)} 秒）`;
+}
+
+function timestampRule(durationSeconds?: number): string {
+  const bound =
+    durationSeconds && durationSeconds > 0
+      ? `所有 start_time / end_time 必须是 0 到 ${Math.round(
+          durationSeconds
+        )} 之间的秒数，绝不能超过视频总时长。`
+      : "所有 start_time / end_time 必须落在视频真实时长之内。";
+  return `**时间戳铁律**：${bound}只能使用上面字幕里真实出现的 [mm:ss] 时间戳，按 分×60+秒 换算成秒。严禁编造、估算或外推字幕中不存在的时间。如果某段无法在字幕中定位到时间戳，就省略该段的 start_time，而不是猜一个。`;
+}
+
 export function buildSingleVideoPrompt(
   videoTitle: string,
   videoId: string,
   transcript: string,
-  seriesContext?: string
+  seriesContext?: string,
+  videoDuration?: number
 ): string {
   const context = seriesContext
     ? `\n\n## 所属系列上下文\n${seriesContext}\n`
     : "";
+  const durationHint = formatDurationHint(videoDuration);
 
   return `## 任务
 为一个 YouTube 视频生成「学习导向包」。
@@ -43,7 +62,7 @@ export function buildSingleVideoPrompt(
 ## 视频信息
 - 标题: ${videoTitle}
 - ID: ${videoId}
-${context}
+${durationHint ? durationHint + "\n" : ""}${context}
 ## 视频字幕/内容摘要
 ${transcript}
 
@@ -85,7 +104,9 @@ ${transcript}
 把视频拆成 4-8 个关键时刻/章节，按出现顺序排列。
 **重要**：上面的字幕每行前面带有 [mm:ss] 时间戳。请根据每个章节首次出现的内容，
 从字幕中找到对应的时间戳，把它换算成秒数填入 start_time（例如 [3:25] → 205）。
-这样用户就能在视频里一键跳转到关键时刻。如果某段实在无法定位时间，可以省略 start_time。
+这样用户就能在视频里一键跳转到关键时刻。
+
+${timestampRule(videoDuration)}
 
 ## 输出格式
 请以 JSON 格式返回，结构如下（start_time / end_time 均为「秒」整数）：
@@ -165,7 +186,8 @@ export function buildEpisodeFromSeriesPrompt(
   episodeTitle: string,
   episodeNumber: number,
   transcript: string,
-  seriesLogic: string
+  seriesLogic: string,
+  videoDuration?: number
 ): string {
   return `## 任务
 为一个视频系列中的单集生成学习导向包。
@@ -206,6 +228,8 @@ ${transcript}
 ### 5. 关键时刻时间线 (sections)
 把本集拆成 4-8 个关键时刻/章节，按顺序排列。字幕每行前带 [mm:ss] 时间戳，
 请据此为每个章节填入 start_time（秒）。例如 [3:25] → 205，方便用户一键跳转。
+
+${timestampRule(videoDuration)}
 
 ## 输出格式
 请以 JSON 格式返回（start_time / end_time 均为「秒」整数）：

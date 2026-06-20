@@ -129,9 +129,18 @@
       return;
     }
 
-    // Key moments — only sections that carry a timestamp are jumpable
+    // Key moments — only sections with a real timestamp inside the video are
+    // jumpable. Guard against stray timestamps past the video length.
+    const durationCap =
+      typeof ep.duration === "number" && ep.duration > 0
+        ? ep.duration + 2
+        : Infinity;
     const moments = (ep.sections || []).filter(
-      (s) => typeof s.start_time === "number" && !isNaN(s.start_time)
+      (s) =>
+        typeof s.start_time === "number" &&
+        !isNaN(s.start_time) &&
+        s.start_time >= 0 &&
+        s.start_time <= durationCap
     );
     const momentsHTML = moments
       .map(

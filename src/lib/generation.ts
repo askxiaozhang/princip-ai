@@ -14,13 +14,32 @@ import {
   extractBilibiliTranscript,
   getBilibiliURL,
 } from "./bilibili";
-import { extractTranscript, truncateTranscript } from "./transcript";
+import {
+  extractTranscript,
+  truncateTranscript,
+  type TranscriptResult,
+} from "./transcript";
 import {
   analyzeVideo,
   analyzeSeries,
   analyzeEpisodeInSeries,
   isAPIKeyAvailable,
 } from "./analysis";
+
+/**
+ * The end timestamp of the last subtitle segment (seconds) — a lower-bound
+ * estimate of the video length, used to clamp hallucinated key-moment times
+ * when the platform duration metadata is unavailable.
+ */
+function transcriptEndSeconds(
+  transcript: TranscriptResult
+): number | undefined {
+  const segs = transcript.segments;
+  if (!segs.length) return undefined;
+  const last = segs[segs.length - 1];
+  const end = last.start + (last.duration || 0);
+  return end > 0 ? Math.ceil(end) : undefined;
+}
 
 /**
  * Generate a full learning package for a YouTube or Bilibili URL
@@ -75,6 +94,7 @@ async function generateBilibiliPackage(
   const { bvid } = info;
   let videoTitle = bvid;
   let videoDesc = "";
+  let videoDuration: number | undefined;
 
   // Fetch video title and description from Bilibili API
   try {
@@ -92,6 +112,16 @@ async function generateBilibiliPackage(
     if (data.code === 0) {
       videoTitle = data.data?.title || bvid;
       videoDesc = data.data?.desc || "";
+      // Bilibili reports duration in seconds; for multi-part videos prefer the
+      // current page's own duration when available.
+      const pageDur = Array.isArray(data.data?.pages)
+        ? data.data.pages.find(
+            (p: { page?: number; duration?: number }) =>
+              p.page === (info.page || 1)
+          )?.duration
+        : undefined;
+      const dur = pageDur ?? data.data?.duration;
+      if (typeof dur === "number" && dur > 0) videoDuration = dur;
     }
   } catch (e) {
     console.warn("Could not get Bilibili video title:", e);
@@ -104,6 +134,7 @@ async function generateBilibiliPackage(
     const transcript = await extractBilibiliTranscript(info);
     transcriptText = truncateTranscript(transcript, 15000);
     transcriptLength = transcript.full_text.length;
+    videoDuration = videoDuration ?? transcriptEndSeconds(transcript);
   } catch (e) {
     if (e instanceof Error && e.message.includes("没有可用字幕")) {
       // No CC subtitles — use video description as a lightweight fallback
@@ -116,11 +147,18 @@ async function generateBilibiliPackage(
   }
 
   // Analyze with LLM
-  const analysis = await analyzeVideo(videoTitle, bvid, transcriptText);
+  const analysis = await analyzeVideo(
+    videoTitle,
+    bvid,
+    transcriptText,
+    undefined,
+    videoDuration
+  );
 
   const episode: EpisodeGuide = {
     video_id: bvid,
     title: videoTitle,
+    duration: videoDuration,
     url: getBilibiliURL(bvid, info.page),
     questions: analysis.questions,
     cognitive_benefits: analysis.cognitive_benefits,
@@ -158,9 +196,12 @@ async function generateSingleVideoPackage(
   const innertube = await Innertube.create({ retrieve_player: false });
 
   let videoTitle = videoId;
+  let videoDuration: number | undefined;
   try {
     const info = await innertube.getBasicInfo(videoId);
     videoTitle = info.basic_info?.title || videoId;
+    const dur = info.basic_info?.duration;
+    if (typeof dur === "number" && dur > 0) videoDuration = dur;
   } catch (e) {
     console.warn("Could not get video title:", e);
   }
@@ -168,6 +209,10 @@ async function generateSingleVideoPackage(
   // Extract transcript
   const transcript = await extractTranscript(videoId);
   const truncated = truncateTranscript(transcript, 15000);
+
+  // Fall back to the last subtitle timestamp if the duration metadata is missing,
+  // so key-moment timestamps can still be clamped to the real video length.
+  videoDuration = videoDuration ?? transcriptEndSeconds(transcript);
 
   // Generate series context if in a known series
   let seriesContext: string | undefined;
@@ -182,12 +227,14 @@ async function generateSingleVideoPackage(
     videoTitle,
     videoId,
     truncated,
-    seriesContext
+    seriesContext,
+    videoDuration
   );
 
   const episode: EpisodeGuide = {
     video_id: videoId,
     title: videoTitle,
+    duration: videoDuration,
     url: getYouTubeURL(videoId),
     questions: analysis.questions,
     cognitive_benefits: analysis.cognitive_benefits,
@@ -292,14 +339,17 @@ async function generateKnownSeriesPackage(
     try {
       const transcript = await extractTranscript(ep.id);
       const truncated = truncateTranscript(transcript, 10000);
+      const epDuration = transcriptEndSeconds(transcript);
 
       const epAnalysis = await analyzeEpisodeInSeries(
         ep.title,
         ep.number,
         truncated,
-        seriesAnalysis.narrative_logic
+        seriesAnalysis.narrative_logic,
+        epDuration
       );
 
+      episodes[i].duration = epDuration;
       episodes[i].questions = epAnalysis.questions;
       episodes[i].cognitive_benefits = epAnalysis.cognitive_benefits;
       episodes[i].misconceptions = epAnalysis.misconceptions;
