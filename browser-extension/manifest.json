@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "PrincipAI - 前置式主动学习引擎",
   "short_name": "PrincipAI",
-  "version": "0.2.0",
-  "description": "在观看视频前，AI 生成「学习导向包」——让你带着问题主动学习，而不是被动接收。支持 YouTube 和 Bilibili。",
+  "version": "0.3.0",
+  "description": "在观看视频前，AI 生成「学习导向包」——让你带着问题主动学习，而不是被动接收。支持关键时刻一键跳转、主动回忆评估。支持 YouTube 和 Bilibili。",
   "permissions": [
     "storage",
     "activeTab",

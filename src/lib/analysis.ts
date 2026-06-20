@@ -11,7 +11,11 @@ import {
   buildEpisodeFromSeriesPrompt,
   buildSummaryPrompt,
 } from "./prompts";
-import type { FirstPrincipleQuestion, VideoSection } from "./types";
+import type {
+  FirstPrincipleQuestion,
+  VideoSection,
+  AnswerEvaluation,
+} from "./types";
 
 let anthropicClient: Anthropic | null = null;
 
@@ -46,6 +50,40 @@ function extractJson(text: string): string {
     return fenceMatch[1].trim();
   }
   return trimmed;
+}
+
+/**
+ * Coerce an LLM-provided timestamp into seconds.
+ * Accepts a number (seconds) or a "mm:ss" / "hh:mm:ss" string.
+ */
+function parseTimeToSeconds(val: unknown): number | undefined {
+  if (typeof val === "number" && Number.isFinite(val)) {
+    return val >= 0 ? Math.round(val) : undefined;
+  }
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+    const parts = trimmed.split(":").map((p) => parseInt(p, 10));
+    if (parts.length >= 2 && parts.every((n) => !isNaN(n))) {
+      return parts.reduce((acc, n) => acc * 60 + n, 0);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Normalize the `sections` array from an LLM response, preserving
+ * optional start_time / end_time so the UI can offer key-moment jumps.
+ */
+function mapSections(raw: unknown): VideoSection[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s: Record<string, unknown>) => ({
+    title: (s.title as string) || "",
+    summary: (s.summary as string) || "",
+    key_concepts: (s.key_concepts as string[]) || [],
+    start_time: parseTimeToSeconds(s.start_time),
+    end_time: parseTimeToSeconds(s.end_time),
+  }));
 }
 
 export interface AnalysisConfig {
@@ -128,17 +166,7 @@ export async function analyzeVideo(
       ),
       cognitive_benefits: parsed.cognitive_benefits || [],
       misconceptions: parsed.misconceptions || [],
-      sections: (parsed.sections || []).map(
-        (s: {
-          title: string;
-          summary: string;
-          key_concepts: string[];
-        }) => ({
-          title: s.title,
-          summary: s.summary,
-          key_concepts: s.key_concepts || [],
-        })
-      ),
+      sections: mapSections(parsed.sections),
     };
   } catch (e) {
     throw new Error(`解析 LLM 输出失败: ${e}`);
@@ -240,17 +268,7 @@ export async function analyzeEpisodeInSeries(
       ),
       cognitive_benefits: parsed.cognitive_benefits || [],
       misconceptions: parsed.misconceptions || [],
-      sections: (parsed.sections || []).map(
-        (s: {
-          title: string;
-          summary: string;
-          key_concepts: string[];
-        }) => ({
-          title: s.title,
-          summary: s.summary,
-          key_concepts: s.key_concepts || [],
-        })
-      ),
+      sections: mapSections(parsed.sections),
     };
   } catch (e) {
     throw new Error(`解析 LLM 输出失败: ${e}`);
@@ -360,5 +378,104 @@ JSON 格式：
     return JSON.parse(extractJson(content));
   } catch (e) {
     throw new Error(`解析测验题失败: ${e}`);
+  }
+}
+
+/**
+ * Active-recall evaluation: grade a learner's free-form answer to a
+ * first-principle question. The point is to force active thinking — the
+ * learner must produce an explanation, and the AI judges whether it
+ * grasps the essence (not whether it recites a definition).
+ */
+export async function evaluateAnswer(
+  question: string,
+  userAnswer: string,
+  opts: {
+    whyItMatters?: string;
+    depthHint?: string;
+    transcript?: string;
+    videoTitle?: string;
+  } = {},
+  config?: Partial<AnalysisConfig>
+): Promise<AnswerEvaluation> {
+  const client = getAnthropicClient();
+  const cfg = resolveConfig(config);
+
+  const context = [
+    opts.videoTitle ? `## 视频标题\n${opts.videoTitle}` : "",
+    opts.whyItMatters ? `## 这个问题为什么重要\n${opts.whyItMatters}` : "",
+    opts.depthHint ? `## 答到什么程度算真正理解\n${opts.depthHint}` : "",
+    opts.transcript
+      ? `## 视频内容摘要（评分参考）\n${opts.transcript.slice(0, 3000)}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const userPrompt = `## 任务
+学习者尝试用自己的话回答一道第一性原理问题。请像一位严格但有建设性的导师那样评估这个回答。
+评估的核心是：学习者是否抓住了本质，而不是是否复述了定义或用词是否漂亮。
+
+## 问题
+${question}
+
+${context}
+
+## 学习者的回答
+${userAnswer || "（空白 / 我不会）"}
+
+## 评估要求
+- score：0-100 的整数，反映对本质的把握程度（不是表达流畅度）
+- verdict：从 "mastered"（已掌握本质）、"partial"（部分理解但有缺口）、"misunderstood"（存在关键误解或几乎没答）三选一
+- strengths：1-3 条，具体指出回答中真正答到点子上的地方（若没有则空数组）
+- gaps：1-3 条，具体指出缺失的关键点或误解，越具体越好
+- model_answer：一段抓住本质的参考答案，帮助学习者补齐认知，而不是简单给标准定义
+- suggestion：一句话，告诉学习者带着什么去看（或重看）视频
+
+请只用中文，对空白或敷衍的回答也要认真给出 model_answer 和 gaps。
+
+## 输出格式
+请以 JSON 返回：
+{
+  "score": 0,
+  "verdict": "partial",
+  "strengths": ["..."],
+  "gaps": ["..."],
+  "model_answer": "...",
+  "suggestion": "..."
+}`;
+
+  const response = await client.messages.create({
+    model: cfg.model,
+    temperature: 0.4,
+    max_tokens: 2048,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const content = response.content.find((b) => b.type === "text")?.text || "";
+  if (!content) throw new Error("LLM 返回为空");
+
+  try {
+    const parsed = JSON.parse(extractJson(content));
+    const rawScore = Number(parsed.score);
+    const score = Number.isFinite(rawScore)
+      ? Math.max(0, Math.min(100, Math.round(rawScore)))
+      : 0;
+    const verdict: AnswerEvaluation["verdict"] =
+      parsed.verdict === "mastered" ||
+      parsed.verdict === "misunderstood"
+        ? parsed.verdict
+        : "partial";
+    return {
+      score,
+      verdict,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+      gaps: Array.isArray(parsed.gaps) ? parsed.gaps : [],
+      model_answer: parsed.model_answer || "",
+      suggestion: parsed.suggestion || "",
+    };
+  } catch (e) {
+    throw new Error(`解析评估结果失败: ${e}`);
   }
 }

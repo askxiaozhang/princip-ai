@@ -5,6 +5,7 @@ import { URLInput } from "@/components/URLInput";
 import { LearningPackageView } from "@/components/LearningPackageView";
 import { MindMap } from "@/components/MindMap";
 import { QuizView, type QuizQuestion } from "@/components/QuizView";
+import { ActiveRecallView } from "@/components/ActiveRecallView";
 import type { LearningPackage } from "@/lib/types";
 
 type Tab = "guide" | "mindmap" | "quiz";
@@ -18,12 +19,15 @@ export default function Home() {
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [showRecall, setShowRecall] = useState(false);
 
   const handleSubmit = async (url: string) => {
     setIsLoading(true);
     setError(null);
     setPkg(null);
     setQuiz(null);
+    setShowQuiz(false);
+    setShowRecall(false);
     setActiveTab("guide");
 
     try {
@@ -173,6 +177,14 @@ export default function Home() {
               )}
               出题测验
             </button>
+            <button
+              onClick={() => setShowRecall(true)}
+              disabled={!pkg.series.episodes[0]?.questions.length}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-all disabled:opacity-50 flex items-center gap-1.5"
+              title="用自己的话回答前置问题，AI 评估你的理解"
+            >
+              🧠 主动回忆
+            </button>
           </div>
 
           {quizError && (
@@ -189,6 +201,14 @@ export default function Home() {
               quiz={quiz}
               title={pkg.series.episodes[0]?.title || pkg.title}
               onClose={() => setShowQuiz(false)}
+            />
+          )}
+
+          {showRecall && pkg.series.episodes[0]?.questions.length > 0 && (
+            <ActiveRecallView
+              questions={pkg.series.episodes[0].questions}
+              title={pkg.series.episodes[0]?.title || pkg.title}
+              onClose={() => setShowRecall(false)}
             />
           )}
         </section>

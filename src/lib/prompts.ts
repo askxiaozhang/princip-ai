@@ -81,8 +81,14 @@ ${transcript}
 - 解释为什么容易误解
 - 给出检验标准：真正理解 vs 表面理解的表现
 
+### 5. 关键时刻时间线 (sections)
+把视频拆成 4-8 个关键时刻/章节，按出现顺序排列。
+**重要**：上面的字幕每行前面带有 [mm:ss] 时间戳。请根据每个章节首次出现的内容，
+从字幕中找到对应的时间戳，把它换算成秒数填入 start_time（例如 [3:25] → 205）。
+这样用户就能在视频里一键跳转到关键时刻。如果某段实在无法定位时间，可以省略 start_time。
+
 ## 输出格式
-请以 JSON 格式返回，结构如下：
+请以 JSON 格式返回，结构如下（start_time / end_time 均为「秒」整数）：
 {
   "narrative_logic": "编排逻辑拆解的完整文本",
   "chapter_dependencies": "这一讲依赖的前置知识，以及它为后续哪些内容铺路",
@@ -99,6 +105,8 @@ ${transcript}
     {
       "title": "章节标题",
       "summary": "章节摘要",
+      "start_time": 205,
+      "end_time": 360,
       "key_concepts": ["概念1", "概念2"]
     }
   ]
@@ -195,8 +203,12 @@ ${transcript}
 ### 4. 常见误区预警 (misconceptions)
 3-4 个具体误区
 
+### 5. 关键时刻时间线 (sections)
+把本集拆成 4-8 个关键时刻/章节，按顺序排列。字幕每行前带 [mm:ss] 时间戳，
+请据此为每个章节填入 start_time（秒）。例如 [3:25] → 205，方便用户一键跳转。
+
 ## 输出格式
-请以 JSON 格式返回：
+请以 JSON 格式返回（start_time / end_time 均为「秒」整数）：
 {
   "narrative_logic": "编排逻辑拆解文本",
   "chapter_dependencies": "本集的前置依赖和后续铺垫",
@@ -213,6 +225,8 @@ ${transcript}
     {
       "title": "章节标题",
       "summary": "章节摘要",
+      "start_time": 205,
+      "end_time": 360,
       "key_concepts": ["概念1", ...]
     }
   ]

@@ -78,6 +78,47 @@
     }
   }
 
+  // ===== Key-moment jump =====
+
+  // Find the page's main <video> element (YouTube / Bilibili).
+  function getVideoEl() {
+    return (
+      document.querySelector("video.html5-main-video") ||
+      document.querySelector(".bpx-player-video-wrap video") ||
+      document.querySelector("video")
+    );
+  }
+
+  // Seek the video to `seconds` and start playing.
+  function seekTo(seconds) {
+    const video = getVideoEl();
+    if (!video) return false;
+    try {
+      video.currentTime = seconds;
+      const p = video.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+      // Scroll the player into view so the jump is visible
+      video.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    } catch (e) {
+      console.warn("PrincipAI seek failed:", e);
+      return false;
+    }
+  }
+
+  function formatTime(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    if (m >= 60) {
+      const h = Math.floor(m / 60);
+      return `${h}:${(m % 60).toString().padStart(2, "0")}:${sec
+        .toString()
+        .padStart(2, "0")}`;
+    }
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+
   function renderPackage(pkg) {
     const content = document.getElementById("principai-panel-content");
     if (!content || !pkg) return;
@@ -87,6 +128,24 @@
       content.innerHTML = `<p style="color:#71717a;font-size:13px;">无法解析学习导向包。</p>`;
       return;
     }
+
+    // Key moments — only sections that carry a timestamp are jumpable
+    const moments = (ep.sections || []).filter(
+      (s) => typeof s.start_time === "number" && !isNaN(s.start_time)
+    );
+    const momentsHTML = moments
+      .map(
+        (s) => `
+      <button class="principai-moment" data-time="${s.start_time}">
+        <span class="principai-moment-time">${formatTime(s.start_time)}</span>
+        <span class="principai-moment-body">
+          <span class="principai-moment-title">${s.title}</span>
+          ${s.summary ? `<span class="principai-moment-summary">${s.summary}</span>` : ""}
+        </span>
+      </button>
+    `
+      )
+      .join("");
 
     const questionsHTML = (ep.questions || [])
       .map(
@@ -114,6 +173,17 @@
         <h3 style="font-size:15px;font-weight:700;color:white;margin:0 0 4px 0;">${ep.title}</h3>
         <p style="font-size:12px;color:#71717a;margin:0;">${pkg.series.series_title}</p>
       </div>
+
+      ${
+        momentsHTML
+          ? `
+        <div class="principai-section">
+          <div class="principai-section-title">⏱️ 关键时刻 · 点击跳转</div>
+          ${momentsHTML}
+        </div>
+      `
+          : ""
+      }
 
       ${
         questionsHTML
@@ -154,6 +224,22 @@
         </a>
       </div>
     `;
+
+    // Wire up key-moment jump buttons
+    content.querySelectorAll(".principai-moment").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const time = parseFloat(btn.getAttribute("data-time"));
+        if (isNaN(time)) return;
+        const ok = seekTo(time);
+        if (!ok) {
+          btn.classList.add("principai-moment-failed");
+          setTimeout(
+            () => btn.classList.remove("principai-moment-failed"),
+            1200
+          );
+        }
+      });
+    });
   }
 
   async function handleAnalyzeClick() {

@@ -426,18 +426,23 @@ const LA_DEMO_EPISODES: EpisodeGuide[] = [
         title: "向量的三种视角",
         summary:
           "介绍向量作为箭头（物理）、坐标（计算机）、数据点（数据科学）的三种等价视角",
+        start_time: 0,
+        end_time: 220,
         key_concepts: ["向量", "箭头表示", "坐标表示", "数据点表示"],
       },
       {
         title: "向量加法与数乘",
         summary:
           "讲解向量加法的平行四边形法则和数乘的缩放含义",
+        start_time: 220,
+        end_time: 390,
         key_concepts: ["向量加法", "平行四边形法则", "标量乘法", "缩放"],
       },
       {
         title: "基向量与张成空间",
         summary:
           "引入基向量的概念，讨论一个或两个向量能'到达'的空间范围",
+        start_time: 390,
         key_concepts: ["基向量", "张成空间", "线性组合", "线性无关"],
       },
     ],

@@ -7,6 +7,27 @@ interface EpisodeCardProps {
   episode: EpisodeGuide;
 }
 
+function formatTimestamp(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toString().padStart(2, "0");
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    return `${h}:${(m % 60).toString().padStart(2, "0")}:${sec}`;
+  }
+  return `${m}:${sec}`;
+}
+
+/** Build a deep link that opens the video at a given timestamp. */
+function timestampedUrl(url: string, seconds: number): string {
+  const t = Math.round(seconds);
+  if (url.includes("bilibili.com")) {
+    return `${url}${url.includes("?") ? "&" : "?"}t=${t}`;
+  }
+  // YouTube and generic
+  return `${url}${url.includes("?") ? "&" : "?"}t=${t}s`;
+}
+
 export function EpisodeCard({ episode }: EpisodeCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -72,7 +93,7 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
           {episode.sections && episode.sections.length > 0 && (
             <div>
               <h4 className="text-sm font-medium text-zinc-400 mb-3">
-                📑 内容结构
+                ⏱️ 关键时刻 · 点击跳转
               </h4>
               <div className="grid gap-2">
                 {episode.sections.map((section, i) => (
@@ -80,8 +101,20 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
                     key={i}
                     className="rounded-lg bg-zinc-800/50 p-3"
                   >
-                    <div className="font-medium text-white text-sm">
-                      {section.title}
+                    <div className="font-medium text-white text-sm flex items-center gap-2">
+                      {typeof section.start_time === "number" && (
+                        <a
+                          href={timestampedUrl(episode.url, section.start_time)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-shrink-0 font-mono text-xs font-semibold text-blue-300 bg-blue-950/50 hover:bg-blue-600 hover:text-white rounded px-1.5 py-0.5 transition-colors tabular-nums"
+                          title="在新标签页跳转到该时刻"
+                        >
+                          {formatTimestamp(section.start_time)}
+                        </a>
+                      )}
+                      <span>{section.title}</span>
                     </div>
                     <div className="text-zinc-400 text-xs mt-1">
                       {section.summary}
