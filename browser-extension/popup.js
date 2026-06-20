@@ -5,7 +5,7 @@ async function checkServer(url) {
     const res = await fetch(`${url}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://www.youtube.com/watch?v=test" }),
+      body: JSON.stringify({ url: "https://www.youtube.com/watch?v=k7RM-otwjNW", mode: "demo" }),
       signal: AbortSignal.timeout(3000),
     });
     // Any response (even error JSON) means the server is reachable

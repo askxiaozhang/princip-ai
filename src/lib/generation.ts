@@ -74,8 +74,9 @@ async function generateBilibiliPackage(
 
   const { bvid } = info;
   let videoTitle = bvid;
+  let videoDesc = "";
 
-  // Try to get video title from Bilibili API
+  // Fetch video title and description from Bilibili API
   try {
     const res = await fetch(
       `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
@@ -90,17 +91,32 @@ async function generateBilibiliPackage(
     const data = await res.json();
     if (data.code === 0) {
       videoTitle = data.data?.title || bvid;
+      videoDesc = data.data?.desc || "";
     }
   } catch (e) {
     console.warn("Could not get Bilibili video title:", e);
   }
 
-  // Extract subtitle
-  const transcript = await extractBilibiliTranscript(info);
-  const truncated = truncateTranscript(transcript, 15000);
+  // Try to extract subtitles; fall back to video description if none available
+  let transcriptText = "";
+  let transcriptLength = 0;
+  try {
+    const transcript = await extractBilibiliTranscript(info);
+    transcriptText = truncateTranscript(transcript, 15000);
+    transcriptLength = transcript.full_text.length;
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("没有可用字幕")) {
+      // No CC subtitles — use video description as a lightweight fallback
+      transcriptText = videoDesc
+        ? `视频标题：${videoTitle}\n视频简介：${videoDesc}`
+        : `视频标题：${videoTitle}`;
+    } else {
+      throw e;
+    }
+  }
 
   // Analyze with LLM
-  const analysis = await analyzeVideo(videoTitle, bvid, truncated);
+  const analysis = await analyzeVideo(videoTitle, bvid, transcriptText);
 
   const episode: EpisodeGuide = {
     video_id: bvid,
@@ -120,12 +136,12 @@ async function generateBilibiliPackage(
     generated_at: new Date().toISOString(),
     series: {
       series_title: videoTitle,
-      series_description: "Bilibili 视频",
+      series_description: transcriptLength > 0 ? "Bilibili 视频" : "Bilibili 视频（无字幕，基于简介分析）",
       narrative_logic: analysis.narrative_logic,
       chapter_dependencies: analysis.chapter_dependencies,
       episodes: [episode],
     },
-    transcript_length: transcript.full_text.length,
+    transcript_length: transcriptLength,
   };
 }
 

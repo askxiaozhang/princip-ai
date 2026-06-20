@@ -33,6 +33,32 @@
 | 🗺️ **交互式思维导图** | 知识结构可视化，章节间的逻辑关系一目了然 |
 | ✏️ **出题测验** | AI 生成测验题，验证真正理解而非"看过了" |
 
+### 效果预览
+
+<p align="center">
+  <img src="assets/screenshot.png" alt="PrincipAI 效果预览" width="800" />
+</p>
+
+### 当前阶段：Phase 2 🚀
+
+> **Phase 2 已完成核心功能开发**，以下是当前可体验的能力：
+>
+> - 🎬 **视频平台支持**：YouTube + Bilibili 双平台字幕提取
+> - 🧠 **灵活 LLM 接入**：DashScope（推荐国内）/ OpenAI / 任意兼容 API
+> - 📚 **预设课程 Demo**：3Blue1Brown **线性代数**（11 集）+ **微积分**（11 集）
+> - 🗺️ **交互式思维导图**：点击折叠/展开，知识结构一目了然
+> - ✏️ **出题测验**：AI 生成单选题 + 即时反馈 + 解析
+> - 🌐 **浏览器插件（基础版）**：Chrome MV3，视频页注入按钮 + 侧边栏展示
+
+#### 浏览器插件示意
+
+<p align="center">
+  <img src="assets/extension-preview.png" alt="PrincipAI 浏览器插件" width="800" />
+</p>
+
+> 💡 你可以将自己截取的插件效果图放到 `assets/extension-preview.png`，或替换其他阶段性截图。
+> `assets/` 目录用于存放所有阶段性效果展示图片。
+
 ### 示例：3Blue1Brown 线性代数
 
 ```
@@ -198,6 +224,9 @@ princip-ai/
 ├── english.md
 ├── feasibility-report.md      # 可行性调研报告
 ├── core.md                    # 产品核心思路
+├── assets/                    # 阶段性效果展示图片
+│   ├── screenshot.png         # 主站效果预览
+│   └── extension-preview.png  # 浏览器插件示意（待添加）
 ├── browser-extension/         # 浏览器插件（Chrome MV3）
 │   ├── manifest.json
 │   ├── content.js             # 视频页面注入脚本
